@@ -93,7 +93,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+            # 小红书首页常因长连接/资源多导致 "load" 事件迟迟不触发，
+            # 改用 domcontentloaded 并放宽超时，避免 goto 误判超时。
+            await self.context_page.goto(
+                self.index_url, wait_until="domcontentloaded", timeout=60000
+            )
 
             # Create a client to interact with the Xiaohongshu website.
             self.xhs_client = await self.create_xhs_client(httpx_proxy_format)

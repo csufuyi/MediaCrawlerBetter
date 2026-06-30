@@ -290,7 +290,9 @@ class CDPBrowserManager:
         Get browser WebSocket connection URL
         """
         try:
-            async with httpx.AsyncClient() as client:
+            # trust_env=False: ignore HTTP_PROXY/HTTPS_PROXY env vars so the
+            # local CDP request is not routed through a proxy (which returns 502).
+            async with httpx.AsyncClient(trust_env=False) as client:
                 response = await client.get(
                     f"http://localhost:{debug_port}/json/version", timeout=10
                 )
