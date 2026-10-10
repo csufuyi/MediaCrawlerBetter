@@ -190,3 +190,4 @@ tools/taobao_cookies.txt
 # local backups
 *.bak-*
 .DS_Store
+data_raw_backup_*/
