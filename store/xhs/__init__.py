@@ -21,6 +21,7 @@
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 17:34
 # @Desc    :
+import json
 from typing import List
 
 import config
@@ -154,5 +155,39 @@ async def save_creator(user_id: str, creator: Dict):
     Returns:
 
     """
-    # 教学版：创作者个人资料(昵称/性别/头像/IP/粉丝数等)不再落库，防骚扰。
-    return
+    user_info = creator.get('basicInfo', {})
+
+    follows = 0
+    fans = 0
+    interaction = 0
+    for i in creator.get('interactions') or []:
+        if i.get('type') == 'follows':
+            follows = i.get('count')
+        elif i.get('type') == 'fans':
+            fans = i.get('count')
+        elif i.get('type') == 'interaction':
+            interaction = i.get('count')
+
+    def get_gender(gender):
+        if gender == 1:
+            return 'Female'
+        elif gender == 0:
+            return 'Male'
+        else:
+            return None
+
+    local_db_item = {
+        'creator_hash': anonymize_user_id(user_id),  # 创作者匿名哈希(不存原始 user_id)
+        'nickname': mask_nickname(user_info.get('nickname')),  # 用户昵称(已脱敏)
+        'gender': get_gender(user_info.get('gender')),  # Gender
+        'desc': user_info.get('desc'),  # Personal description
+        'ip_location': user_info.get('ipLocation'),  # IP location
+        'follows': follows,  # Following count
+        'fans': fans,  # Fans count
+        'interaction': interaction,  # Interaction count
+        'tag_list': json.dumps({tag.get('tagType'): tag.get('name')
+                                for tag in creator.get('tags') or []}, ensure_ascii=False),  # Tags
+        "last_modify_ts": utils.get_current_timestamp(),  # Last modification timestamp
+    }
+    utils.logger.info(f"[store.xhs.save_creator] creator:{local_db_item}")
+    await XhsStoreFactory.create_store().store_creator(local_db_item)

@@ -153,5 +153,20 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
 
 
 async def save_creator(user_id: str, creator: Dict):
-    # 教学版：创作者个人资料(昵称/性别/头像/签名/IP/粉丝数等)不再落库，防骚扰。
-    return
+    user_info = creator.get("user", {})
+    gender_map = {0: "Unknown", 1: "Male", 2: "Female"}
+    local_db_item = {
+        # 用 uid 哈希，与内容/评论的 creator_hash 一致；取不到时退回 sec_uid
+        "creator_hash": anonymize_user_id(user_info.get("uid") or user_id),
+        "nickname": mask_nickname(user_info.get("nickname")),
+        "gender": gender_map.get(user_info.get("gender"), "Unknown"),
+        "desc": user_info.get("signature"),
+        "ip_location": user_info.get("ip_location"),
+        "follows": user_info.get("following_count", 0),
+        "fans": user_info.get("max_follower_count", 0),
+        "interaction": user_info.get("total_favorited", 0),
+        "videos_count": user_info.get("aweme_count", 0),
+        "last_modify_ts": utils.get_current_timestamp(),
+    }
+    utils.logger.info(f"[store.douyin.save_creator] creator:{local_db_item}")
+    await DouyinStoreFactory.create_store().store_creator(local_db_item)
