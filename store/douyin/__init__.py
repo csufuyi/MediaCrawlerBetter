@@ -24,10 +24,11 @@
 from typing import List
 
 import config
+from media_platform.douyin.media import extract_cover_url, extract_image_urls, extract_video_urls
 from var import source_keyword_var
+from tools.user_hash import anonymize_user_id, mask_nickname
 
 from ._store_impl import *
-from .douyin_store_media import *
 
 
 class DouyinStoreFactory:
@@ -48,30 +49,6 @@ class DouyinStoreFactory:
         if not store_class:
             raise ValueError("[DouyinStoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite or mongodb or excel ...")
         return store_class()
-
-
-def _extract_note_image_list(aweme_detail: Dict) -> List[str]:
-    """
-    Extract note image list
-
-    Args:
-        aweme_detail (Dict): Douyin content details
-
-    Returns:
-        List[str]: Note image list
-    """
-    images_res: List[str] = []
-    images: List[Dict] = aweme_detail.get("images", [])
-
-    if not images:
-        return []
-
-    for image in images:
-        image_url_list = image.get("url_list", [])  # download_url_list has watermarked images, url_list has non-watermarked images
-        if image_url_list:
-            images_res.append(image_url_list[-1])
-
-    return images_res
 
 
 def _extract_comment_image_list(comment_item: Dict) -> List[str]:
@@ -96,46 +73,6 @@ def _extract_comment_image_list(comment_item: Dict) -> List[str]:
             images_res.append(image_url_list[1])
 
     return images_res
-
-
-def _extract_content_cover_url(aweme_detail: Dict) -> str:
-    """
-    Extract video cover URL
-
-    Args:
-        aweme_detail (Dict): Douyin content details
-
-    Returns:
-        str: Video cover URL
-    """
-    res_cover_url = ""
-
-    video_item = aweme_detail.get("video", {})
-    raw_cover_url_list = (video_item.get("raw_cover", {}) or video_item.get("origin_cover", {})).get("url_list", [])
-    if raw_cover_url_list and len(raw_cover_url_list) > 1:
-        res_cover_url = raw_cover_url_list[1]
-
-    return res_cover_url
-
-
-def _extract_video_download_url(aweme_detail: Dict) -> str:
-    """
-    Extract video download URL
-
-    Args:
-        aweme_detail (Dict): Douyin video
-
-    Returns:
-        str: Video download URL
-    """
-    video_item = aweme_detail.get("video", {})
-    url_h264_list = video_item.get("play_addr_h264", {}).get("url_list", [])
-    url_256_list = video_item.get("play_addr_256", {}).get("url_list", [])
-    url_list = video_item.get("play_addr", {}).get("url_list", [])
-    actual_url_list = url_h264_list or url_256_list or url_list
-    if not actual_url_list or len(actual_url_list) < 2:
-        return ""
-    return actual_url_list[-1]
 
 
 def _extract_music_download_url(aweme_detail: Dict) -> str:
@@ -164,24 +101,18 @@ async def update_douyin_aweme(aweme_item: Dict):
         "title": aweme_item.get("desc", ""),
         "desc": aweme_item.get("desc", ""),
         "create_time": aweme_item.get("create_time"),
-        "user_id": user_info.get("uid"),
-        "sec_uid": user_info.get("sec_uid"),
-        "short_user_id": user_info.get("short_id"),
-        "user_unique_id": user_info.get("unique_id"),
-        "user_signature": user_info.get("signature"),
-        "nickname": user_info.get("nickname"),
-        "avatar": user_info.get("avatar_thumb", {}).get("url_list", [""])[0],
+        "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
+        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
         "liked_count": str(interact_info.get("digg_count")),
         "collected_count": str(interact_info.get("collect_count")),
         "comment_count": str(interact_info.get("comment_count")),
         "share_count": str(interact_info.get("share_count")),
-        "ip_location": aweme_item.get("ip_label", ""),
         "last_modify_ts": utils.get_current_timestamp(),
         "aweme_url": f"https://www.douyin.com/video/{aweme_id}",
-        "cover_url": _extract_content_cover_url(aweme_item),
-        "video_download_url": _extract_video_download_url(aweme_item),
+        "cover_url": extract_cover_url(aweme_item),
+        "video_download_url": (extract_video_urls(aweme_item) or [""])[0],
         "music_download_url": _extract_music_download_url(aweme_item),
-        "note_download_url": ",".join(_extract_note_image_list(aweme_item)),
+        "note_download_url": ",".join(extract_image_urls(aweme_item)),
         "source_keyword": source_keyword_var.get(),
     }
     utils.logger.info(f"[store.douyin.update_douyin_aweme] douyin aweme id:{aweme_id}, title:{save_content_item.get('title')}")
@@ -203,11 +134,9 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
     user_info = comment_item.get("user", {})
     comment_id = comment_item.get("cid")
     parent_comment_id = comment_item.get("reply_id", "0")
-    avatar_info = (user_info.get("avatar_medium", {}) or user_info.get("avatar_300x300", {}) or user_info.get("avatar_168x168", {}) or user_info.get("avatar_thumb", {}) or {})
     save_comment_item = {
         "comment_id": comment_id,
         "create_time": comment_item.get("create_time"),
-        "ip_location": comment_item.get("ip_label", ""),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
         "user_id": user_info.get("uid"),
@@ -230,51 +159,5 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
 
 
 async def save_creator(user_id: str, creator: Dict):
-    user_info = creator.get("user", {})
-    gender_map = {0: "Unknown", 1: "Male", 2: "Female"}
-    avatar_uri = user_info.get("avatar_300x300", {}).get("uri")
-    local_db_item = {
-        "user_id": user_id,
-        "nickname": user_info.get("nickname"),
-        "gender": gender_map.get(user_info.get("gender"), "Unknown"),
-        "avatar": f"https://p3-pc.douyinpic.com/img/{avatar_uri}" + r"~c5_300x300.jpeg?from=2956013662",
-        "desc": user_info.get("signature"),
-        "ip_location": user_info.get("ip_location"),
-        "follows": user_info.get("following_count", 0),
-        "fans": user_info.get("max_follower_count", 0),
-        "interaction": user_info.get("total_favorited", 0),
-        "videos_count": user_info.get("aweme_count", 0),
-        "last_modify_ts": utils.get_current_timestamp(),
-    }
-    utils.logger.info(f"[store.douyin.save_creator] creator:{local_db_item}")
-    await DouyinStoreFactory.create_store().store_creator(local_db_item)
-
-
-async def update_dy_aweme_image(aweme_id, pic_content, extension_file_name):
-    """
-    Update Douyin note image
-    Args:
-        aweme_id:
-        pic_content:
-        extension_file_name:
-
-    Returns:
-
-    """
-
-    await DouYinImage().store_image({"aweme_id": aweme_id, "pic_content": pic_content, "extension_file_name": extension_file_name})
-
-
-async def update_dy_aweme_video(aweme_id, video_content, extension_file_name):
-    """
-    Update Douyin short video
-    Args:
-        aweme_id:
-        video_content:
-        extension_file_name:
-
-    Returns:
-
-    """
-
-    await DouYinVideo().store_video({"aweme_id": aweme_id, "video_content": video_content, "extension_file_name": extension_file_name})
+    # 教学版：创作者个人资料(昵称/性别/头像/签名/IP/粉丝数等)不再落库，防骚扰。
+    return
