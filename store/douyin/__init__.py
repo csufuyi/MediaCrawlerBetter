@@ -139,14 +139,8 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
         "create_time": comment_item.get("create_time"),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
-        "user_id": user_info.get("uid"),
-        "sec_uid": user_info.get("sec_uid"),
-        "short_user_id": user_info.get("short_id"),
-        # 评论者只留平台 ID：抖音号、签名、昵称、头像不落盘（consumer-insight 2026-09-28）
-        "user_unique_id": None,
-        "user_signature": None,
-        "nickname": None,
-        "avatar": None,
+        "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
+        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
         "last_modify_ts": utils.get_current_timestamp(),
