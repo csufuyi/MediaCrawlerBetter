@@ -180,3 +180,9 @@ debug_tools
 
 database/*.db
 .omx/
+# 淘宝评论抓取工具的本地登录 cookie（含登录态，切勿提交）
+tools/taobao_cookies.txt
+
+# local backups
+*.bak-*
+.DS_Store

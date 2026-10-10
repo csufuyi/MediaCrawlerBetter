@@ -95,7 +95,7 @@ class DouYinCrawler(AbstractCrawler):
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+            await self.context_page.goto(self.index_url, timeout=120000, wait_until="domcontentloaded")
 
             self.dy_client = await self.create_douyin_client(httpx_proxy_format)
             if not await self.dy_client.pong(browser_context=self.browser_context):
@@ -208,8 +208,11 @@ class DouYinCrawler(AbstractCrawler):
 
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_aweme_detail(aweme_id=aweme_id, semaphore=semaphore) for aweme_id in aweme_id_list]
-        aweme_details = await asyncio.gather(*task_list)
+        aweme_details = await asyncio.gather(*task_list, return_exceptions=True)
         for aweme_detail in aweme_details:
+            if isinstance(aweme_detail, BaseException):
+                utils.logger.warning(f"[POC] 跳过失败项: {aweme_detail}")
+                continue
             if aweme_detail is not None:
                 await douyin_store.update_douyin_aweme(aweme_item=aweme_detail)
                 await self.get_aweme_media(aweme_item=aweme_detail)
@@ -287,6 +290,15 @@ class DouYinCrawler(AbstractCrawler):
             if creator_info:
                 await douyin_store.save_creator(user_id, creator=creator_info)
 
+            # POC 补丁：只取画像时跳过全量作品爬取（见 dy_config.DY_CREATOR_INFO_ONLY）
+            # consumer-insight 补丁（2026-09-28）：环境变量优先，便于不改配置文件切换
+            _info_only = os.environ.get("DY_CREATOR_INFO_ONLY")
+            _info_only = (_info_only.lower() in ("1", "true")) if _info_only is not None \
+                else getattr(config, "DY_CREATOR_INFO_ONLY", False)
+            if _info_only:
+                utils.logger.info(f"[DouYinCrawler] INFO_ONLY 模式，跳过 {user_id} 的作品爬取")
+                continue
+
             # Get all video information of the creator
             all_video_list = await self.dy_client.get_all_user_aweme_posts(sec_user_id=user_id, callback=self.fetch_creator_video_detail)
 
@@ -300,8 +312,11 @@ class DouYinCrawler(AbstractCrawler):
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_aweme_detail(post_item.get("aweme_id"), semaphore) for post_item in video_list]
 
-        note_details = await asyncio.gather(*task_list)
+        note_details = await asyncio.gather(*task_list, return_exceptions=True)
         for aweme_item in note_details:
+            if isinstance(aweme_item, BaseException):
+                utils.logger.warning(f"[POC] 跳过失败项: {aweme_item}")
+                continue
             if aweme_item is not None:
                 await douyin_store.update_douyin_aweme(aweme_item=aweme_item)
                 await self.get_aweme_media(aweme_item=aweme_item)

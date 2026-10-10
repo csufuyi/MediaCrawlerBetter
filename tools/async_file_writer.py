@@ -27,6 +27,10 @@ import config
 from tools.utils import utils
 from tools.words import AsyncWordCloudGenerator
 
+# consumer-insight 2026-09-29：文件日期在进程启动时定下，并可由 MC_RUN_DATE 指定（编排器传整轮的开跑日）。
+# 原来每写一条都取当天日期，采集跨过零点就换文件，编排器按开跑日数条数全数成 0、误判限流熔断
+RUN_DATE = os.environ.get("MC_RUN_DATE") or utils.get_current_date()
+
 class AsyncFileWriter:
     def __init__(self, platform: str, crawler_type: str):
         self.lock = asyncio.Lock()
@@ -40,7 +44,7 @@ class AsyncFileWriter:
         else:
             base_path = f"data/{self.platform}/{file_type}"
         pathlib.Path(base_path).mkdir(parents=True, exist_ok=True)
-        file_name = f"{self.crawler_type}_{item_type}_{utils.get_current_date()}.{file_type}"
+        file_name = f"{self.crawler_type}_{item_type}_{RUN_DATE}.{file_type}"
         return f"{base_path}/{file_name}"
 
     async def write_to_csv(self, item: Dict, item_type: str):
@@ -137,7 +141,7 @@ class AsyncFileWriter:
             else:
                 words_base_path = f"data/{self.platform}/words"
             pathlib.Path(words_base_path).mkdir(parents=True, exist_ok=True)
-            words_file_prefix = f"{words_base_path}/{self.crawler_type}_comments_{utils.get_current_date()}"
+            words_file_prefix = f"{words_base_path}/{self.crawler_type}_comments_{RUN_DATE}"
 
             utils.logger.info(f"[AsyncFileWriter.generate_wordcloud_from_comments] Generating wordcloud from {len(filtered_data)} comments")
             await self.wordcloud_generator.generate_word_frequency_and_cloud(filtered_data, words_file_prefix)

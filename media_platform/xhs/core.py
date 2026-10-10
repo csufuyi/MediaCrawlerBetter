@@ -171,8 +171,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             semaphore=semaphore,
                         ) for post_item in notes_res.get("items", {}) if post_item.get("model_type") not in ("rec_query", "hot_query")
                     ]
-                    note_details = await asyncio.gather(*task_list)
+                    note_details = await asyncio.gather(*task_list, return_exceptions=True)
                     for note_detail in note_details:
+                        if isinstance(note_detail, BaseException):
+                            utils.logger.warning(f"[POC] 跳过失败项: {note_detail}")
+                            continue
                         if note_detail:
                             await xhs_store.update_xhs_note(note_detail)
                             await self.get_notice_media(note_detail)
@@ -241,8 +244,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
             ) for post_item in note_list
         ]
 
-        note_details = await asyncio.gather(*task_list)
+        note_details = await asyncio.gather(*task_list, return_exceptions=True)
         for note_detail in note_details:
+            if isinstance(note_detail, BaseException):
+                utils.logger.warning(f"[POC] 跳过失败项: {note_detail}")
+                continue
             if note_detail:
                 await xhs_store.update_xhs_note(note_detail)
                 await self.get_notice_media(note_detail)
@@ -266,8 +272,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
         need_get_comment_note_ids = []
         xsec_tokens = []
-        note_details = await asyncio.gather(*get_note_detail_task_list)
+        note_details = await asyncio.gather(*get_note_detail_task_list, return_exceptions=True)
         for note_detail in note_details:
+            if isinstance(note_detail, BaseException):
+                utils.logger.warning(f"[POC] 跳过失败项: {note_detail}")
+                continue
             if note_detail:
                 need_get_comment_note_ids.append(note_detail.get("note_id", ""))
                 xsec_tokens.append(note_detail.get("xsec_token", ""))
@@ -341,7 +350,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 name=note_id,
             )
             task_list.append(task)
-        await asyncio.gather(*task_list)
+        await asyncio.gather(*task_list, return_exceptions=True)
 
     async def get_comments(self, note_id: str, xsec_token: str, semaphore: asyncio.Semaphore):
         """Get note comments with keyword filtering and quantity limitation"""

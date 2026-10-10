@@ -169,8 +169,9 @@ async def update_xhs_note_comment(note_id: str, comment_item: Dict):
         "note_id": note_id,  # Note ID
         "content": comment_item.get("content"),  # Comment content
         "user_id": user_info.get("user_id"),  # User ID
-        "nickname": user_info.get("nickname"),  # User nickname
-        "avatar": user_info.get("image"),  # User avatar
+        # 评论者只留 user_id：昵称、头像不落盘（consumer-insight 2026-09-28）
+        "nickname": None,
+        "avatar": None,
         "sub_comment_count": comment_item.get("sub_comment_count", 0),  # Sub-comment count
         "pictures": ",".join(comment_pictures),  # Comment pictures
         "parent_comment_id": target_comment.get("id", 0),  # Parent comment ID

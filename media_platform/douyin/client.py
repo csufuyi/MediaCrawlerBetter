@@ -333,12 +333,18 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         posts_has_more = 1
         max_cursor = ""
         result = []
-        while posts_has_more == 1:
+        # consumer-insight 补丁（2026-09-28）：每个账号最多取最近 N 条作品，0 = 不限（原行为）。
+        # 原函数无上限翻到底，liaoji 实测 1500 条作品的账号单个要 2.8 小时。
+        import os as _os
+        _cap = int(_os.environ.get("DY_CREATOR_MAX_POSTS") or 0)
+        while posts_has_more == 1 and not (_cap and len(result) >= _cap):
             aweme_post_res = await self.get_user_aweme_posts(sec_user_id, max_cursor)
             posts_has_more = aweme_post_res.get("has_more", 0)
             max_cursor = aweme_post_res.get("max_cursor")
             aweme_list = aweme_post_res.get("aweme_list") if aweme_post_res.get("aweme_list") else []
             utils.logger.info(f"[DouYinClient.get_all_user_aweme_posts] get sec_user_id:{sec_user_id} video len : {len(aweme_list)}")
+            if _cap:
+                aweme_list = aweme_list[: max(0, _cap - len(result))]
             if callback:
                 await callback(aweme_list)
             result.extend(aweme_list)
