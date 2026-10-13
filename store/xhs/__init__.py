@@ -27,7 +27,7 @@ from typing import List
 import config
 from media_platform.xhs.media import extract_video_urls
 from var import source_keyword_var
-from tools.user_hash import anonymize_user_id, mask_nickname
+from tools.user_hash import anonymize_user_id, keep_post_author, mask_nickname
 
 from ._store_impl import *
 
@@ -94,6 +94,8 @@ async def update_xhs_note(note_item: Dict):
         "source_keyword": source_keyword_var.get(),  # Search keyword
         "xsec_token": note_item.get("xsec_token"),  # xsec_token
     }
+    if keep_post_author():  # 廖记补丁：帖子作者照原名写回（见 tools/user_hash.keep_post_author）
+        local_db_item.update(user_id=user_info.get("user_id"), nickname=user_info.get("nickname"))
     utils.logger.info(f"[store.xhs.update_xhs_note] xhs note: {local_db_item}")
     await XhsStoreFactory.create_store().store_content(local_db_item)
 
@@ -189,5 +191,7 @@ async def save_creator(user_id: str, creator: Dict):
                                 for tag in creator.get('tags') or []}, ensure_ascii=False),  # Tags
         "last_modify_ts": utils.get_current_timestamp(),  # Last modification timestamp
     }
+    if keep_post_author():  # 同上；user_id 照 e15d63a 是调用方传进来的号
+        local_db_item.update(user_id=user_id, nickname=user_info.get("nickname"))
     utils.logger.info(f"[store.xhs.save_creator] creator:{local_db_item}")
     await XhsStoreFactory.create_store().store_creator(local_db_item)

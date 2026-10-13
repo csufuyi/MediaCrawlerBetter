@@ -26,7 +26,7 @@ from typing import List
 import config
 from media_platform.douyin.media import extract_cover_url, extract_image_urls, extract_video_urls
 from var import source_keyword_var
-from tools.user_hash import anonymize_user_id, mask_nickname
+from tools.user_hash import anonymize_user_id, keep_post_author, mask_nickname
 
 from ._store_impl import *
 
@@ -115,6 +115,9 @@ async def update_douyin_aweme(aweme_item: Dict):
         "note_download_url": ",".join(extract_image_urls(aweme_item)),
         "source_keyword": source_keyword_var.get(),
     }
+    if keep_post_author():  # 廖记补丁：帖子作者照原名写回（见 tools/user_hash.keep_post_author）
+        save_content_item.update(user_id=user_info.get("uid"), sec_uid=user_info.get("sec_uid"),
+                                 nickname=user_info.get("nickname"))
     utils.logger.info(f"[store.douyin.update_douyin_aweme] douyin aweme id:{aweme_id}, title:{save_content_item.get('title')}")
     await DouyinStoreFactory.create_store().store_content(content_item=save_content_item)
 
@@ -168,5 +171,7 @@ async def save_creator(user_id: str, creator: Dict):
         "videos_count": user_info.get("aweme_count", 0),
         "last_modify_ts": utils.get_current_timestamp(),
     }
+    if keep_post_author():  # 同上；user_id 照 e15d63a 是调用方传进来的号，按账号采集时就是 sec_uid
+        local_db_item.update(user_id=user_id, nickname=user_info.get("nickname"))
     utils.logger.info(f"[store.douyin.save_creator] creator:{local_db_item}")
     await DouyinStoreFactory.create_store().store_creator(local_db_item)
